@@ -1,4 +1,4 @@
-install.packages("factoextra")
+#install.packages("factoextra")
 library(xtable)
 library(knitr)
 library(kableExtra)  
@@ -7,6 +7,8 @@ library(factoextra)
 df <- read.csv("C:/Users/muribe/Documents/Happiness.csv",row.names = 1)
 
 df <- df[-c(1:4)]
+df <- na.omit(df)
+
 head(df)
 
 df <- scale(df)
@@ -19,10 +21,11 @@ print(distance)
 
 fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#387c2c"))
 
-dfk3 <- kmeans(na.omit(df), centers = 4, nstart = 75)
+dfk3 <- kmeans(df, centers = 4, nstart = 75)
 str(dfk3)
 print(dfk3)
 
 
-fviz_cluster(dfk3, data = na.omit(df))
+fviz_cluster(dfk3, data = df,main = "K-Means of Happiness Index 2012",labelsize = 9, ggtheme = theme_minimal(),ellipse.type = "norm")
+
 

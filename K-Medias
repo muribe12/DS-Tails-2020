@@ -4,7 +4,7 @@ library(knitr)
 library(kableExtra)  
 library(factoextra)
 
-df <- read.csv("C:/Users/muribe/Documents/Happiness.csv")
+df <- read.csv("C:/Users/muribe/Documents/Happiness.csv",row.names = 1)
 
 df <- df[-c(1:4)]
 head(df)
@@ -25,3 +25,4 @@ print(dfk3)
 
 
 fviz_cluster(dfk3, data = na.omit(df))
+

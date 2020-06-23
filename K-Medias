@@ -20,6 +20,7 @@ distance <- get_dist(df)
 print(distance)
 
 fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#387c2c"))
+fviz_nbclust(df,kmeans,method = "wss")
 
 dfk3 <- kmeans(df, centers = 4, nstart = 75)
 str(dfk3)

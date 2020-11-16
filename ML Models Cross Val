@@ -1,0 +1,1072 @@
+---
+title: "AMVII_Entregable2_MelaniaUribe"
+author: "Melania"
+date: "11/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## EJERCICIO 1
+
+Cargue los datos que se encuentran en el archivo “estrellas.csv”, el conjunto de datos tiene 17898 observaciones y 9 variables en cada una. Específicamente, este dataset contiene información estadística de estrellas pulsares obtenidos por el trabajo High Time Resolution Universe Survey (https://arxiv.org/abs/1006.5744), y cuyas variables son:
+
+Media del perfil integrado
+
+• Desviaciación estándar del perfil integrado
+• Exceso de curtosis del perfil integrado
+• Asimetría del perfil integrado
+• Media de la curva DM-SNR
+• Desviación estándar de la curva DM-SNR
+• Exceso de curtosis de la curva DM-SNR
+• Asimetría de la curva DM-SNR
+• Clase de la estrella
+
+
+```{r load_csv,warning=FALSE,message=FALSE}
+
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+library(tidyverse)
+
+df_orig <- read.csv("C:/Users/muribe/OneDrive - VMware, Inc/VMwareCorp/Documents/Data_Science/Modulo3/estrellas1.csv")
+
+df_orig$target_class <- factor(df_orig$target_class, levels = c("0", "1"), labels = c("NonPulsar", "Pulsar"))
+
+df_orig[, c(1:8)] <- scale(df_orig[, c(1:8)])
+
+summary(df_orig)
+
+```
+
+## 1.1 Cree dos data sets
+
+a. 80% para training
+b. 20% para testing:
+
+```{r particion, warning=FALSE,message=FALSE}
+
+df <- df_orig %>%
+  # rename all columns 
+  rename_all(function(.name) {
+    .name %>% 
+      # replace all names with the lowercase versions
+      tolower %>%
+      # replace all spaces with underscores
+      str_replace(" ", "_")
+    })
+
+df <- df_orig %>%
+  # rename all columns 
+  rename_all(function(.name) {
+    .name %>% 
+      # replace all names with the lowercase versions
+      tolower %>%
+      # replace all spaces with underscores
+      str_replace("-", "")
+    })
+
+set.seed(123)
+smp_size <- floor(0.80 * nrow(df))
+
+train_ind <- sample(seq_len(nrow(df)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+
+```
+
+
+## 1.2 Seleccione el mejor núcleo
+
+("linear","radial","polynomial","sigmoid"), para esto deben utilizar el siguiente código (Y es la variable a predecir):
+
+```{r nucleo, warning=FALSE,message=FALSE}
+library(caret)
+library(DT)
+
+folds <- createFolds(train$target_class, k = 10)
+
+train_linear <- e1071::svm(target_class ~ ., data = train, type = 'C-classification', kernel = 'linear')
+train_radial <- e1071::svm(target_class ~ ., data = train, type = 'C-classification', kernel = 'radial')
+train_polynomial <- e1071::svm(target_class ~ ., data = train, type = 'C-classification', kernel = 'polynomial')
+train_sigmoid <- e1071::svm(target_class ~ ., data = train, type = 'C-classification', kernel = 'sigmoid')
+
+y_pred_linear <- predict(train_linear, newdata= test)
+y_pred_radial <- predict(train_radial, newdata= test)
+y_pred_polynomial <- predict(train_polynomial, newdata= test)
+y_pred_sigmoid <- predict(train_sigmoid, newdata= test)
+
+
+linear_cm <- table(test$target_class, y_pred_linear)
+radial_cm <- table(test$target_class, y_pred_radial)
+polynomial_cm <- table(test$target_class, y_pred_polynomial)
+sigmoid_cm <- table(test$target_class, y_pred_sigmoid)
+
+
+linear_precision <- (linear_cm[1,1] + linear_cm[2,2]) / (linear_cm[1,1] + linear_cm[2,2] +linear_cm[1,2] + linear_cm[2,1])
+
+radial_precision <- (radial_cm[1,1] + radial_cm[2,2]) / (radial_cm[1,1] + radial_cm[2,2] +radial_cm[1,2] + radial_cm[2,1])
+
+polynomial_precision <- (polynomial_cm[1,1] + polynomial_cm[2,2]) / (polynomial_cm[1,1] + polynomial_cm[2,2] +polynomial_cm[1,2] + polynomial_cm[2,1])
+
+sigmoid_precision <- (sigmoid_cm[1,1] + sigmoid_cm[2,2]) / (sigmoid_cm[1,1] + sigmoid_cm[2,2] +sigmoid_cm[1,2] + sigmoid_cm[2,1])
+
+results <- data.frame(cbind(Row.Names= c("linear","radial","polynomial","sigmoid") ),c(linear_precision,radial_precision,polynomial_precision,sigmoid_precision))
+
+
+colnames(results)[2] <- "Precision Global"
+colnames(results)[1] <- "Modelo"
+
+DT::datatable(results)%>%formatPercentage("Precision Global",1)
+
+```
+
+## 1.3 Entrenamiento de otros modelos
+
+a. Bayes
+b. Árboles
+c. Bosques Aleatorios
+d. Regresión Logística
+
+```{r otros_modelos, warning=FALSE,message=FALSE}
+#Bayes
+library(naivebayes)
+
+cvNaiveBayes <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- naive_bayes(target_class ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionNaiveBayes <- mean(as.numeric(cvNaiveBayes))
+
+
+#Arboles
+library(rpart)
+cvDecisionTree <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- rpart(target_class ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold, type = 'class')
+  cm <- table(test_fold$target_class, y_pred)
+  tree_precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(tree_precision)
+})
+precisionDecisionTree <- mean(as.numeric(cvDecisionTree))
+
+#Bosques Aleatorios
+library(randomForest)
+cvRandomForest <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- randomForest(target_class ~ ., data = training_fold, ntree = 250)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+
+precisionRandomForest <- mean(as.numeric(cvRandomForest))
+
+#Regresión Logística
+cvRegresionLogistica <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- glm(target_class ~ ., family = binomial, data = training_fold)
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"), labels = c("NoPulsar", "Pulsar"))
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRegresionLogistica <- mean(as.numeric(cvRegresionLogistica))
+
+
+# SVM
+library(e1071)
+cvKernelSVM <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(target_class ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionKernelSVM <- mean(as.numeric(cvKernelSVM))
+
+
+```
+
+## 1.4 Cual modelo es mejor? Justifique su respuesta
+
+Al entrenar todos los modelos y realizar una validación cruzada, se obtiene que la mejor precisión la tiene el modelo de Regresión Logística con casi un 98%.
+
+```{r best_model, warning=FALSE,message=FALSE}
+all_models <- data.frame(cbind(row.names = c("Bayes","Arboles","Bosques","Logistica","SVM")),         c(precisionNaiveBayes,precisionDecisionTree,precisionRandomForest,precisionRegresionLogistica,precisionKernelSVM))
+
+colnames(all_models)[1] <- "Modelo"
+colnames(all_models)[2] <- "Precisión Global"
+
+library(DT)
+DT::datatable(all_models)%>%formatPercentage("Precisión Global",1)
+
+```
+
+## 1.5 Realice 20 veces la calibración de estos modelos (utilizar el código visto en clases)
+
+Realice 20 veces la calibración de estos modelos (utilizar el código visto en clases)
+a. Calcule el promedio de error
+b. Calcule la desviación estándar
+c. ¿Cuál modelo es mejor? Justifique su respuesta
+d. El modelo seleccionado en el punto 3 es el mismo que en el punto 4.
+
+Para este caso se observa conjuntamente los resultados con la desviación estándar y una calibración de 20, siendo el modelo de regresión logística con la precisión más alta y la desviación estándar más baja con un 0.0050.
+
+```{r otros_modelos20, warning=FALSE,message=FALSE}
+# Training Bayes
+
+folds <- caret::createFolds(train$target_class, k = 20)
+
+library(naivebayes)
+
+cvNaiveBayes <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- naive_bayes(target_class ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionNaiveBayes20 <- mean(as.numeric(cvNaiveBayes))
+errorNaiveBayes20 <- 1- precisionNaiveBayes20
+stderrorNaiveBayes20 <- sd(as.numeric(cvNaiveBayes))
+
+#Arboles
+
+library(rpart)
+cvDecisionTree <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- rpart(target_class ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold, type = 'class')
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionDecisionTree20 <- mean(as.numeric(cvDecisionTree))
+errorDecisionTree20 <- 1- precisionDecisionTree20
+stderrorDecisionTree20 <- sd(as.numeric(cvDecisionTree))
+
+#Bosques Aleatorios
+
+library(randomForest)
+cvRandomForest <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- randomForest(target_class ~ ., data = training_fold, ntree = 250)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRandomForest20 <- mean(as.numeric(cvRandomForest))
+errorRandomForest20 <- 1 - precisionRandomForest20
+stderrorRandomForest20 <- sd(as.numeric(cvRandomForest))
+
+
+#Regresión Logística
+
+cvRegresionLogistica <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- glm(target_class ~ ., family = binomial, data = training_fold)
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"), labels = c("NoPulsar", "Pulsar"))
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+
+precisionRegresionLogistica20 <- mean(as.numeric(cvRegresionLogistica))
+errorRegresionLogistica20 <- 1 - precisionRegresionLogistica20
+stderrorRegresionLogistica20 <- sd(as.numeric(cvRegresionLogistica)) 
+
+# SVM
+library(e1071)
+cvKernelSVM <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(target_class ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$target_class, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionKernelSVM20 <- mean(as.numeric(cvKernelSVM))
+errorKernelSVM20 <- 1- precisionKernelSVM20
+stderrorSVMKernel20 <- sd(as.numeric(cvKernelSVM))
+
+```
+
+```{r best_model_20, warning=FALSE,message=FALSE}
+all_models_std_error_uno <- data.frame(
+  c(stderrorNaiveBayes20,stderrorDecisionTree20,
+    stderrorRandomForest20,stderrorRegresionLogistica20,stderrorSVMKernel20))
+
+all_models_prec_global_uno <- data.frame(
+  c(precisionNaiveBayes20,precisionDecisionTree20,
+    precisionRandomForest20,precisionRegresionLogistica20,precisionKernelSVM20))
+
+all_models_error_global_uno <- data.frame(
+  c(errorNaiveBayes20,errorDecisionTree20,
+    errorRandomForest20,errorRegresionLogistica20,errorKernelSVM20))
+
+comparison_uno <- data.frame(cbind(row.names = c("Bayes","Arboles","Bosques","Logistica","SVM"))
+  ,c(all_models_std_error_uno,all_models_prec_global_uno,all_models_error_global_uno)
+                         )
+colnames(comparison_uno)[2] <- "Std_Error"
+colnames(comparison_uno)[3] <- "Precision Global"
+colnames(comparison_uno)[4] <- "Error Global"
+colnames(comparison_uno)[1] <- "Modelo"
+
+DT::datatable(comparison_uno)%>%formatPercentage("Std_Error",1)%>%formatPercentage("Precision Global",1)%>%formatPercentage("Error Global",1)
+
+```
+
+## EJERCICIO 2
+
+## 2.1 Creación de Data Sets
+
+Cargue los datos "PimaIndiansDiabetes2", que se encuentran en el paquete "mlbench"
+Realice lo siguiente:
+
+1. Cree dos datasets:
+
+a. 80% de los datos para training
+b. 20% para testing
+
+```{r load_csv_second,warning=FALSE}
+
+library(mlbench)
+data(PimaIndiansDiabetes)
+
+set.seed(123)
+#summary(PimaIndiansDiabetes)
+
+PimaIndiansDiabetes$diabetes <- factor(PimaIndiansDiabetes$diabetes)
+
+PimaIndiansDiabetes[, c(1:8)] <- scale(PimaIndiansDiabetes[, c(1:8)])
+  
+smp_size <- floor(0.8 * nrow(PimaIndiansDiabetes))
+
+train_ind <- sample(seq_len(nrow(PimaIndiansDiabetes)), size = smp_size)
+
+train <- PimaIndiansDiabetes[train_ind, ]
+test <- PimaIndiansDiabetes[-train_ind, ]
+
+```
+
+
+## 2.2 Seleccione el mejor núcleo
+
+```{r}
+library(e1071)
+library(DT)
+
+folds <- caret::createFolds(train$diabetes, k = 10)
+
+#Linear
+cvSVMLinear <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(diabetes ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelLinear <- mean(as.numeric(cvSVMLinear))
+#print(SVMKernelLinear)
+
+#Radial
+cvSVMRadial <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(diabetes ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'radial')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelRadial <- mean(as.numeric(cvSVMRadial))
+
+#Polynomial
+cvSVMPolynomial <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(diabetes ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'polynomial')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelPolynomial <- mean(as.numeric(cvSVMPolynomial))
+
+
+#Sigmoid
+cvSVMSigmoid <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(diabetes ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'sigmoid')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelSigmoid <- mean(as.numeric(cvSVMSigmoid))
+
+#KernelPrecision
+
+KernelPrecision <- data.frame(c(SVMKernelLinear,SVMKernelRadial,SVMKernelPolynomial,SVMKernelSigmoid),cbind(row.names = c("Lineal","Radial","Polynomial","Sigmoidal")))
+
+colnames(KernelPrecision)[1] <- "Precision Global"
+colnames(KernelPrecision)[2] <- "SVMKernel"
+
+DT::datatable(KernelPrecision)%>%formatPercentage("Precision Global",1)
+
+```
+
+
+## 2.3 Entrenamiento de otros modelos
+
+a. Bayes
+b. Árboles
+c. Bosques Aleatorios
+d. Regresión Logística
+
+```{r otros_modelos_dos, warning=FALSE,message=FALSE}
+library(DT)
+
+#Bayes
+library(naivebayes)
+
+cvNaiveBayes <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- naive_bayes(diabetes ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionNaiveBayes <- mean(as.numeric(cvNaiveBayes))
+
+
+#Arboles
+library(rpart)
+cvDecisionTree <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- rpart(diabetes ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold, type = 'class')
+  cm <- table(test_fold$diabetes, y_pred)
+  tree_precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(tree_precision)
+})
+precisionDecisionTree <- mean(as.numeric(cvDecisionTree))
+
+#Bosques Aleatorios
+library(randomForest)
+cvRandomForest <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- randomForest(diabetes ~ ., data = training_fold, ntree = 250)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+
+precisionRandomForest <- mean(as.numeric(cvRandomForest))
+
+#Regresión Logística
+cvRegresionLogistica <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- glm(diabetes ~ ., family = binomial, data = training_fold)
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"), labels = c("neg", "pos"))
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRegresionLogistica <- mean(as.numeric(cvRegresionLogistica))
+
+
+# SVM
+library(e1071)
+cvKernelSVM <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(diabetes ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionKernelSVM <- mean(as.numeric(cvKernelSVM))
+
+```
+
+## 2.4 Cual modelo es mejor? Justifique su respuesta
+
+Al entrenar todos los modelos y comparar su precisión parece que el modelo de regresión logística tiene el porcentaje más alto con un 77%.
+
+```{r best_model_dos, warning=FALSE,message=FALSE}
+library(DT)
+
+all_models_dos <- data.frame(cbind(row.names = c("Bayes","Arboles","Bosques","Logistica","SVM")),c(precisionNaiveBayes,precisionDecisionTree,precisionRandomForest,precisionRegresionLogistica,precisionKernelSVM))
+
+colnames(all_models_dos)[2] <- "Precisión Global"
+colnames(all_models_dos)[1] <- "Modelo"
+
+DT::datatable(all_models_dos)%>%formatPercentage("Precisión Global")
+
+```
+
+## 2.5 Realice 20 veces la calibración de estos modelos (utilizar el código visto en clases)
+
+Realice 20 veces la calibración de estos modelos (utilizar el código visto en clases)
+a. Calcule el promedio de error
+b. Calcule la desviación estándar
+c. ¿Cuál modelo es mejor? Justifique su respuesta
+d. El modelo seleccionado en el punto 3 es el mismo que en el punto 4.
+
+Para este caso se observa conjuntamente los resultados con la desviación estándar y una calibración de 20, siendo el modelo de regresión logística con la precisión más alta y la desviación estándar más baja con un 0.0050.
+
+```{r otros_modelos20_dos, warning=FALSE,message=FALSE}
+# Training Bayes
+library(DT)
+
+folds <- caret::createFolds(train$diabetes, k = 20)
+
+library(naivebayes)
+
+cvNaiveBayes <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- naive_bayes(diabetes ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionNaiveBayes20 <- mean(as.numeric(cvNaiveBayes))
+errorNaiveBayes20 <- 1- precisionNaiveBayes20
+stderrorNaiveBayes20 <- sd(as.numeric(cvNaiveBayes))
+
+
+#Arboles
+
+library(rpart)
+cvDecisionTree <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- rpart(diabetes ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold, type = 'class')
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionDecisionTree20 <- mean(as.numeric(cvDecisionTree))
+errorDecisionTree20 <- 1- precisionDecisionTree20
+stderrorDecisionTree20 <- sd(as.numeric(cvDecisionTree))
+
+#Bosques Aleatorios
+
+library(randomForest)
+cvRandomForest <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- randomForest(diabetes ~ ., data = training_fold, ntree = 250)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRandomForest20 <- mean(as.numeric(cvRandomForest))
+errorRandomForest20 <- 1 - precisionRandomForest20
+stderrorRandomForest20 <- sd(as.numeric(cvRandomForest))
+
+#Regresión Logística
+
+cvRegresionLogistica <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- glm(diabetes ~ ., family = binomial, data = training_fold)
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"), labels = c("neg", "pos"))
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRegresionLogistica20 <- mean(as.numeric(cvRegresionLogistica))
+errorRegresionLogistica20 <- 1 - precisionRegresionLogistica20
+stderrorRegresionLogistica20 <- sd(as.numeric(cvRegresionLogistica))
+
+
+# SVM
+library(e1071)
+cvKernelSVM <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(diabetes ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$diabetes, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionKernelSVM20 <- mean(as.numeric(cvKernelSVM))
+errorKernelSVM20 <- 1- precisionKernelSVM20
+stderrorSVMKernel20 <- sd(as.numeric(cvKernelSVM))
+
+```
+
+```{r best_model_20_dos, warning=FALSE,message=FALSE}
+library(DT)
+
+all_models_std_error_dos <- data.frame(
+  c(stderrorNaiveBayes20,stderrorDecisionTree20,
+    stderrorRandomForest20,stderrorRegresionLogistica20,stderrorSVMKernel20))
+
+all_models_prec_global_dos <- data.frame(
+  c(precisionNaiveBayes20,precisionDecisionTree20,
+    precisionRandomForest20,precisionRegresionLogistica20,precisionKernelSVM20))
+
+all_models_error_global_dos <- data.frame(
+  c(errorNaiveBayes20,errorDecisionTree20,
+    errorRandomForest20,errorRegresionLogistica20,errorKernelSVM20))
+
+comparison_dos <- data.frame(cbind(row.names = c("Bayes","Arboles","Bosques","Logistica","SVM"))
+  ,c(all_models_std_error_dos,all_models_prec_global_dos,all_models_error_global_dos)
+                         )
+colnames(comparison_dos)[2] <- "Std_Error"
+colnames(comparison_dos)[3] <- "Precision Global"
+colnames(comparison_dos)[4] <- "Error Global"
+colnames(comparison_dos)[1] <- "Modelo"
+
+DT::datatable(comparison_dos)%>%formatPercentage("Std_Error",1)%>%formatPercentage("Precision Global",1)%>%formatPercentage("Error Global",1)
+
+```
+
+## EJERCICIO 3
+
+Cargue los datos "Titanic_train", que se encuentran en el paquete "titanic" (datos utilizados en clase).
+
+## 3.1 Cree dos datasets
+
+a. 80% de los datos para training
+b. 20% para testing
+
+```{r titanic_1, warning=FALSE}
+
+#install.packages("stargazer")
+#install.packages("naniar")
+#install.packages("mice")
+library(DT)
+library(tidyverse) 
+library(stargazer)
+library(naniar)
+library(mice)
+library(titanic)
+
+miss_var_summary(titanic_train)
+summary(titanic_train)
+
+titanic_train$Survived <- factor(titanic_train$Survived, levels = c("0", "1"), labels= c("no","yes")) 
+
+titanic_train$Embarked <- as.character(titanic_train$Embarked)
+titanic_train$Embarked[titanic_train$Embarked == ""] <- NA
+
+set.seed(4567)
+
+train_short <- titanic_train %>% 
+  select(Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, Survived) %>% 
+  mutate(Pclass = factor(Pclass),
+         Sex = factor(Sex),
+         Embarked = factor(Embarked),
+         Survived = factor(Survived))
+
+#levels(train_short$Embarked)
+
+imputed_Data <- mice(train_short, m=5, maxit = 50, method = 'pmm')
+
+#stripplot(imputed_Data, pch = 20, cex = 1.2)
+
+completeData <- complete(imputed_Data, 5)
+
+completeData$PassengerId <- titanic_train$PassengerId
+completeData$Age_NA <- titanic_train$Age_NA
+
+titanic_train <- completeData
+
+titanic_train[,c(3:6)] <- scale(titanic_train[,c(3:6)])
+
+summary(titanic_train)
+
+smp_size <- floor(0.8 * nrow(titanic_test))
+train_ind <- sample(seq_len(nrow(titanic_test)), size = smp_size)
+
+train <- titanic_train[train_ind, ]
+test <- titanic_train[-train_ind, ]
+
+```
+
+## 3.2 Seleccione el mejor núcleo
+
+```{r mejor_kernel_tres}
+library(e1071)
+library(DT)
+
+folds <- caret::createFolds(train$Survived, k = 10)
+
+#Linear
+cvSVMLinear <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(Survived ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelLinear <- mean(as.numeric(cvSVMLinear))
+
+#Radial
+cvSVMRadial <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(Survived ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'radial')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelRadial <- mean(as.numeric(cvSVMRadial))
+
+#Polynomial
+cvSVMPolynomial <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(Survived ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'polynomial')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelPolynomial <- mean(as.numeric(cvSVMPolynomial))
+
+
+#Sigmoid
+cvSVMSigmoid <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(Survived ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'sigmoid')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+SVMKernelSigmoid <- mean(as.numeric(cvSVMSigmoid))
+
+#KernelPrecision
+
+KernelPrecision <- data.frame(c(SVMKernelLinear,SVMKernelRadial,SVMKernelPolynomial,SVMKernelSigmoid),cbind(row.names = c("Lineal","Radial","Polynomial","Sigmoidal")))
+
+colnames(KernelPrecision)[1] <- "Precision Global"
+colnames(KernelPrecision)[2] <- "Kernel"
+
+DT::datatable(KernelPrecision)%>%formatPercentage("Precision Global",1)
+
+```
+## 3.3 Entrenamiento de otros modelos
+
+a. Bayes
+b. Árboles
+c. Bosques Aleatorios
+d. Regresión Logística
+
+```{r otros_modelos_tres, message=FALSE, warning=FALSE}
+library(DT)
+
+#Bayes
+library(naivebayes)
+
+train$Survived <- factor(train$Survived)
+
+cvNaiveBayes <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- naive_bayes(Survived ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionNaiveBayes <- mean(as.numeric(cvNaiveBayes))
+
+
+#Arboles
+library(rpart)
+cvDecisionTree <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- rpart(Survived ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold, type = 'class')
+  cm <- table(test_fold$Survived, y_pred)
+  tree_precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(tree_precision)
+})
+precisionDecisionTree <- mean(as.numeric(cvDecisionTree))
+
+#Bosques Aleatorios
+library(randomForest)
+cvRandomForest <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- randomForest(Survived ~ ., data = training_fold, ntree = 250)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+
+precisionRandomForest <- mean(as.numeric(cvRandomForest))
+
+#Regresión Logística
+cvRegresionLogistica <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- glm(Survived ~ ., family = binomial, data = training_fold)
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"))
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRegresionLogistica <- mean(as.numeric(cvRegresionLogistica))
+
+
+# SVM
+library(e1071)
+cvKernelSVM <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(Survived ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionKernelSVM <- mean(as.numeric(cvKernelSVM))
+
+```
+
+## 3.4 Cual modelo es mejor? Justifique su respuesta
+
+Al entrenar todos los modelos y comparar su precisión parece que el modelo de bosques aleatorios tiene el porcentaje más alto con un 79.7%.
+
+```{r best_model_tres, warning=FALSE,message=FALSE}
+library(DT)
+
+all_models_dos <- data.frame(c(precisionNaiveBayes,precisionDecisionTree,precisionRandomForest,precisionRegresionLogistica,precisionKernelSVM),cbind(row.names = c("Bayes","Arboles","Bosques","Logistica","SVM")))
+
+colnames(all_models_dos)[1] <- "Precisión Global"
+colnames(all_models_dos)[2] <- "Modelo"
+
+DT::datatable(all_models_dos)%>%formatPercentage("Precisión Global",1)
+```
+
+## 3.5 Realice 20 veces la calibración de estos modelos (utilizar el código visto en clases)
+
+Realice 20 veces la calibración de estos modelos (utilizar el código visto en clases)
+a. Calcule el promedio de error
+b. Calcule la desviación estándar
+c. ¿Cuál modelo es mejor? Justifique su respuesta
+d. El modelo seleccionado en el punto 3 es el mismo que en el punto 4.
+
+Para este caso se observa conjuntamente los resultados con la desviación estándar y una calibración de 20, siendo el modelo de bosques aleatorios con la precisión más alta y la desviación estándar más baja con un 0.07.
+
+```{r otros_modelos20_tres, warning=FALSE,message=FALSE}
+# Training Bayes
+library(DT)
+
+folds <- caret::createFolds(train$Survived, k = 20)
+
+library(naivebayes)
+
+cvNaiveBayes <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- naive_bayes(Survived ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionNaiveBayes20 <- mean(as.numeric(cvNaiveBayes))
+errorNaiveBayes20 <- 1- precisionNaiveBayes20
+stderrorNaiveBayes20 <- sd(as.numeric(cvNaiveBayes))
+
+#Arboles
+
+library(rpart)
+cvDecisionTree <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- rpart(Survived ~ ., data = training_fold)
+  y_pred <- predict(clasificador, newdata = test_fold, type = 'class')
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionDecisionTree20 <- mean(as.numeric(cvDecisionTree))
+errorDecisionTree20 <- 1- precisionDecisionTree20
+stderrorDecisionTree20 <- sd(as.numeric(cvDecisionTree))
+
+
+#Bosques Aleatorios
+
+library(randomForest)
+cvRandomForest <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- randomForest(Survived ~ ., data = training_fold, ntree = 250)
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRandomForest20 <- mean(as.numeric(cvRandomForest))
+errorRandomForest20 <- 1 - precisionRandomForest20
+stderrorRandomForest20 <- sd(as.numeric(cvRandomForest))
+
+
+#Regresión Logística
+
+cvRegresionLogistica <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- glm(Survived ~ ., family = binomial, data = training_fold)
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"), labels = c("NoPulsar", "Pulsar"))
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionRegresionLogistica20 <- mean(as.numeric(cvRegresionLogistica))
+errorRegresionLogistica20 <- 1 - precisionRegresionLogistica20
+stderrorRegresionLogistica20 <- sd(as.numeric(cvRegresionLogistica)) 
+
+
+# SVM
+library(e1071)
+cvKernelSVM <- lapply(folds, function(x){
+  training_fold <- train[-x, ]
+  test_fold <- train[x, ]
+  clasificador <- svm(Survived ~ .,
+                      data = training_fold, 
+                      type = 'C-classification', 
+                      kernel = 'linear')
+  y_pred <- predict(clasificador, newdata = test_fold)
+  cm <- table(test_fold$Survived, y_pred)
+  precision <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+  return(precision)
+})
+precisionKernelSVM20 <- mean(as.numeric(cvKernelSVM))
+errorKernelSVM20 <- 1- precisionKernelSVM20
+stderrorSVMKernel20 <- sd(as.numeric(cvKernelSVM))
+
+```
+
+```{r best_model_20_tres, warning=FALSE,message=FALSE}
+library(DT)
+
+all_models_std_error_tres <- data.frame(
+  c(stderrorNaiveBayes20,stderrorDecisionTree20,
+    stderrorRandomForest20,stderrorRegresionLogistica20,stderrorSVMKernel20))
+
+all_models_prec_global_tres <- data.frame(
+  c(precisionNaiveBayes20,precisionDecisionTree20,
+    precisionRandomForest20,precisionRegresionLogistica20,precisionKernelSVM20))
+
+all_models_error_global_tres <- data.frame(
+  c(errorNaiveBayes20,errorDecisionTree20,
+    errorRandomForest20,errorRegresionLogistica20,errorKernelSVM20))
+
+comparison_tres <- data.frame(cbind(row.names = c("Bayes","Arboles","Bosques","Logistica","SVM"))
+  ,c(all_models_std_error_tres,all_models_prec_global_tres,all_models_error_global_tres)
+                         )
+                                  
+colnames(comparison_tres)[2] <- "Std_Error"
+colnames(comparison_tres)[3] <- "Precision Global"
+colnames(comparison_tres)[4] <- "Error Global"
+colnames(comparison_tres)[1] <- "Modelo"
+
+DT::datatable(comparison_tres)%>%formatPercentage("Std_Error",1)%>%formatPercentage("Precision Global",1)%>%formatPercentage("Error Global",1)
+
+```

@@ -1,0 +1,69 @@
+library(pdftools)
+library(tidyr)
+library(sqldf)
+
+sDirectorio = "/Users/muribe/Desktop"
+
+archivoPDF = pdftools::pdf_text(file.path(sDirectorio,"centros_votacion.pdf"))
+
+n = 1
+
+repeat { 
+  if (n <50) {
+    
+    vLineas = unlist( strsplit(archivoPDF[n], split = c("\r\n")) )
+    
+    dfDefinicionTabla = data.frame( Orden  = 1:9,
+                                    Campo  = c("Codigo","Provincia","Canton","Distrito","JRVInicial","JRVFinal","TotalJRV","TipoCentro","CentroVotacion"),
+                                    Inicio = c(1,8,21,36,75,86,97,104,127),
+                                    Fin    = c(7,20,35,74,85,96,103,126,180),
+                                    Tipo   = c("numeric","character","character","character","numeric","numeric","numeric","character","character"),
+                                    stringsAsFactors = FALSE)
+    
+    dfTabla = data.frame()
+    
+    for (linea in 7:length(vLineas)) {
+      
+      dfFila = data.frame(n, stringsAsFactors = FALSE)
+      for (campo in 1:nrow(dfDefinicionTabla)){
+        # campo = 2
+        # Extrae cada uno de los campos de la linea  
+        dfFila =cbind(dfFila, trimws(substr( vLineas[linea], 
+                                             dfDefinicionTabla[campo,]$Inicio, 
+                                             dfDefinicionTabla[campo,]$Fin), 
+                                     which = "both") 
+        )
+        
+      }
+      
+      colnames(dfFila)[2:(nrow(dfDefinicionTabla)+1)] = dfDefinicionTabla$Campo
+      
+      dfTabla = rbind(dfTabla, dfFila)
+      
+      assign(paste0("df",n),dfTabla)
+      
+    } 
+    n = n + 1  } else break }
+
+df <- rbind(df1,df2,df3,df4,df5,df6,df7,df8,df9,df10,df11,df12,df13,df14,df15,df16,df17,df18,df19,df20,df21,
+            df22,df23,df24,df25,df26,df27,df28,df29,df30,df31,df32,df33,df34,df35,df36,df37,df38,df39,df40,
+            df41,df42,df43,df44,df45,df46,df47,df48,df49)  
+
+head(df)
+
+##1. Cuantos cantones aparecen en la pagina 26? --- RESPUESTA 5
+
+
+P1 = sqldf("SELECT COUNT(distinct(canton)) FROM df WHERE n=26")
+print(P1)
+
+##2. Las mesas del canton de Jimenez en qué pagina se encuentra?  -- RESPUESTA PAGINA 23
+
+P2 = sqldf("SELECT distinct n FROM df WHERE canton='JIMENEZ'")
+print(P2)
+
+
+##3. Cuantas mesas en total tiene el canton de Santo Domingo?  -- RESPUESTA 10 MESAS
+
+P3 = sqldf("SELECT SUM(JRVfinal)-SUM(JRVInicial) FROM df WHERE canton='SANTO DOMINGO'")
+print(P3)

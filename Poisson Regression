@@ -1,0 +1,35 @@
+##A
+
+N=10000
+n_ciudades = 10
+n_categoria_bar = 4
+n_categorias_bandas = 5 
+
+crear_interacciones=function(variable_categorica, variable_numerica, nombre_variable){
+  i=1
+  for(categoria in sort(unique(variable_categorica))){
+    nueva_col = (variable_categorica==categoria)*variable_numerica
+    nombre_nueva_col = paste0(nombre_variable,"_",categoria)
+    if(i==1){
+      resultado= data.frame(nueva_col=nueva_col)
+    }else{
+      resultado$nueva_col=nueva_col
+    }
+    names(resultado)[i]=c(nombre_nueva_col)
+    i=i+1
+  }
+  return(resultado)
+}
+
+##B
+
+set.seed(123)
+
+Precio = rnorm(N)*3 + 20
+Precio = sapply(Precio,FUN= function(x){max(10,x)})
+
+set.seed(123)
+
+Precio = rnorm(N)*3 + 20
+Precio = sapply(Precio,FUN= function(x){max(10,x)})
+

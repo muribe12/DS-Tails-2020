@@ -1,0 +1,305 @@
+---
+title: "AMVII_Entregable1_MelaniaUribe"
+author: "Melania"
+date: "10/26/2020"
+output: html_document
+---
+
+```{r setup, echo=FALSE, cache=FALSE, message=FALSE, warning=FALSE,include=TRUE, cache = FALSE}
+
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+```
+
+# EJERCICIO 1
+
+## 1.1 Cree dos DataSets
+
+      a. 80% de los datos para training
+      b. 20% para testing
+
+El data set para entrenamiento se encuentra bajo el nombre de "train", mientras que el data set para testeo se encuentra bajo el nombre de "test".
+
+```{r cars, warning=FALSE}
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+library(tidyverse)
+library(recipes)
+
+df_orig <- read.csv("C:/Users/muribe/OneDrive - VMware, Inc/VMwareCorp/Documents/Data_Science/Modulo3/estrellas1.csv")
+
+df <- df_orig %>%
+  # rename all columns 
+  rename_all(function(.name) {
+    .name %>% 
+      # replace all names with the lowercase versions
+      tolower %>%
+      # replace all spaces with underscores
+      str_replace(" ", "_")
+    })
+
+df <- df_orig %>%
+  # rename all columns 
+  rename_all(function(.name) {
+    .name %>% 
+      # replace all names with the lowercase versions
+      tolower %>%
+      # replace all spaces with underscores
+      str_replace("-", "")
+    })
+
+set.seed(123)
+smp_size <- floor(0.80 * nrow(df))
+
+train_ind <- sample(seq_len(nrow(df)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+
+```
+
+
+## 1.2 ¿Cuáles variables parecen tener un mayor poder predictivo?
+
+Fijando un modelo predictivo utilizando como variable dependiente "target class", las variables que parecieran tener mayor poder o correlación sobre la misma son:
+
+      1. excess kurtosis of the integrated profile
+      2. skewnedd kurtosis of the integrated profile
+      3. mean of the integrated profile
+      4. standard deviation of the dm-snr curve
+      5. excess kurtosis of the dm-snr curve
+      
+El criterio es basado en aquellas correlaciones que parecen ser más fuertes según el plot de correlacion con colores más pronunciados y círculos más grandes.
+
+
+``` {r, warning=FALSE}
+library(corrplot)
+
+train$target_class = factor(train$target_class)
+test$target_class = factor(test$target_class)
+
+df <- scale(df)
+M <- cor(df)
+
+corrplot(M, method = "circle", type = "upper")
+
+mylogit <-glm( target_class ~ mean.of.the.integrated.profile + 
+                 standard.deviation.of.the.integrated.profile +
+               excess.kurtosis.of.the.integrated.profile + 
+                 skewness.of.the.integrated.profile
+               + mean.of.the.dm.snr.curve + standard.deviation.of.the.dm.snr.curve + excess.kurtosis.of.the.dm.snr.curve + skewness.of.the.dm.snr.curve, data = train, family = "binomial")
+
+summary(mylogit)
+
+
+```
+## 1.3 Calibre el modelo utilizando todas las variables
+
+``` {r, warning=FALSE}
+
+mylogit <-glm( target_class ~ mean.of.the.integrated.profile + 
+                 standard.deviation.of.the.integrated.profile +
+               excess.kurtosis.of.the.integrated.profile + 
+                 skewness.of.the.integrated.profile
+               + mean.of.the.dm.snr.curve + standard.deviation.of.the.dm.snr.curve + excess.kurtosis.of.the.dm.snr.curve + skewness.of.the.dm.snr.curve, data = train, family = "binomial")
+
+
+probabilities <- mylogit %>% predict(test, type = "response")
+head(probabilities)
+
+test$target_class = factor(test$target_class)
+
+
+contrasts(test$target_class)
+
+
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0)
+
+predicted.classes
+
+mean(predicted.classes == test$diabetes)
+
+#pred_target <- predict(mylogit,test)
+
+#regr.eval(train$target_class,pred_target)
+
+#plot(model_lm$residuals)
+
+
+
+```
+
+## 1.4 Calibre el modelo utilizando solo las variables que usted crea que son mejores
+
+Se crea un nuevo data set con únicamente las 5 variables mencionadas anteriormente con base en la posición de la column donde se sitúan en el data set completo.
+
+``` {r, warning=FALSE}
+df_new <- df[ , c(1,3,4,6,7,9)]
+
+df_new <- scale(df_new)
+
+```
+
+## 1.5 Compare los resultados de los puntos 3 y 4.
+
+Para proceder a comparar ambos puntos se corre otro análisis de correlación con el nuevo data set generado.
+
+Las correlaciones con la variable independiente iguen siendo las mismas pero se logra una mayor claridad de comprensión entre ellas  dado que el gráfico produce menos variables con mayor significancia y por tanto más fácilidad para leer y ser compararadas entre sí.
+
+``` {r, warning=FALSE}
+df_new <- scale(df_new)
+
+N <- cor(df_new)
+
+corrplot(N, method = "circle", type = "upper")
+
+```
+
+
+# EJERCICIO 2.
+
+Cargue los datos "PimaIndiansDiabetes2", que se encuentran en el paquete "mlbench"
+
+
+```{r mlbench, echo=TRUE, error=FALSE, warning=FALSE, echoe=FALSE}
+
+library(mlbench)
+
+data(PimaIndiansDiabetes)
+
+```
+
+## 2.1. Cree dos datasets:
+
+      a. 75% de los datos para training
+      b. 25% para testing
+
+```{r , warning=FALSE}
+
+set.seed(123)
+
+smp_size <- floor(0.75 * nrow(PimaIndiansDiabetes))
+
+train_ind <- sample(seq_len(nrow(PimaIndiansDiabetes)), size = smp_size)
+
+train <- PimaIndiansDiabetes[train_ind, ]
+test <- PimaIndiansDiabetes[-train_ind, ]
+
+```
+
+## 2.2 Cuáles variables parecen tener un mayor poder predictivo? 
+
+Para responder a esta pregunta se crea un modelo de regresión logística donde la variable 'diabetes' es el outcome o variable dependiente y las otras las variables predictoras.
+
+Al obtener un resumen de los estimados, error estándar, valor z y p se resaltan que las variables con mayor poder predictivo al utilizar este modelo logit resultan ser 'pregnant', 'glucose' y 'mass'/
+
+``` {r, warning=FALSE}
+train$diabetes = factor(train$diabetes)
+
+diab_mod <- glm(diabetes ~ pregnant + glucose + pressure + mass + age + insulin + triceps +
+    pedigree, family = "binomial", data = train)
+
+summary(diab_mod)
+
+```
+## 2.2. Calibre el modelo utilizando todas las variables
+
+``` {r, warning=FALSE}
+
+train$diabetes = factor(train$diabetes)
+
+diab_mod <- glm(diabetes ~ pregnant + glucose + pressure + mass + age + insulin + triceps +
+    pedigree, family = "binomial", data = train)
+
+probabilities <- diab_mod %>% predict(test, type = "response")
+
+#head(probabilities)
+
+test$diabetes = factor(test$diabetes)
+
+contrasts(test$diabetes)
+
+predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg")
+
+predicted.classes
+
+mean(predicted.classes == test$diabetes)
+
+```
+
+
+## 2.3 Calibre el modelo utilizando solo las variables que usted crea que son mejores
+
+
+``` {r, warning=FALSE}
+
+
+train$diabetes = factor(train$diabetes)
+
+
+diab_mod1 <- glm(diabetes ~ pregnant + glucose + mass + pressure, family = "binomial", data = train)
+
+summary(diab_mod1)
+
+probabilities <- diab_mod1 %>% predict(test, type = "response")
+head(probabilities)
+
+test$diabetes = factor(test$diabetes)
+
+contrasts(test$diabetes)
+
+predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg")
+
+predicted.classes
+
+mean(predicted.classes == test$diabetes)
+
+
+```
+
+## 2.4 Compare los resultados de los puntos 3 y 4.
+
+Al utilizar únicamente las variables que parecen tener mayor valor de predicción, el AIC indicador de costo de intercambio de ajuste del modelo parece mantenerse muy similar, por lo que este indicador no nos ayuda a juzgar las diferencias en cuanto a la eficiencia ni la precisión de ambos modelos.
+
+Sin embargo, al correr ambos modelos para predecir el factor diabetes con el mismo set de datos de testing, pareciera ser que en el primer caso donde se contienen todas las varibales predictoras se logró alcanzar un 77% de certeza en cuanto a las variables predecidas versus las reales. En el caso del segundo modelo, se logra alcanzar un 74% de certeza en cuanto a la predicción del factor diabetes.
+
+Con esto se concluye que al intentar optimizar la selección de variables para obtener un modelo más sencillo y menos costoso realmente solo resulta en una pérdida de precisión en las predicciones a un mismo costo que corriendolo con todas las variables incluidas. 
+
+# EJERCICIO 3
+
+## 3.1. Ejecute un ACP
+
+``` {r, warning=FALSE}
+
+elecc <- read.csv("C:/Users/muribe/OneDrive - VMware, Inc/VMwareCorp/Documents/Data_Science/Modulo3/Elecciones.csv", sep= ";", row.names=1)
+
+#elecc<- transpose(elecc)
+
+summary(elecc)
+
+elecc_pca <- prcomp(elecc, scale = TRUE)
+
+fviz_pca_ind(elecc_pca, col.ind = "#00AFBB",
+   repel = TRUE)
+
+```
+
+## 3.2. Analice los resultados del ACP del punto 1
+
+El 90.4% de la varianza es explicada por el componente 1, esto deja sospecha a primer ojo de si exactamente son variables las que estamos analizando o meramente una matriz de resultados.
+
+Al observar el set de datos se puede ver que ya ha sido procesado y que no contiene información suficiente para explicar un fenómeno en sí, si no más bien una forma resumida de los resultados del mismo.
+
+ACP no aporta ningún beneficio para mi criterio aplicarlo a este set de datos. Habría que tener mayores características de los indiviuos votantes para poder realizar un análisis exploratorio. 
